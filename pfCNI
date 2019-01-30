@@ -1,10 +1,10 @@
 #!/bin/bash
 
-exec 2>> /tmp/bashlog
+exec 2>> /var/log/pfcni.log
 
 network_conf=$(cat /dev/stdin)
 
-$gateway
+$gateway=192.168.20.1
 
 #IP ADDR for the pod
 IP_ADDR=192.168.20.10/24
