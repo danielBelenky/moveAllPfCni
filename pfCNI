@@ -10,11 +10,17 @@ $gateway=192.168.20.1
 IP_ADDR=192.168.20.10/24
 
 # Pick a namespace name
-namespace=anyname
+mynetns=default-ns
+IFS=';'
+for i in $CNI_ARGS; do
+    echo $i >>  /var/log/demolog
+    if [[ $(echo $i | awk -F '=' '{print$1}') == K8S_POD_NAME ]]; then
+      mynetns=$(echo $i | awk -F '=' '{print$2}')
+      echo "netns: $mynetns" >>  /var/log/demolog
+    fi
+done
 
-if [[ $CNI_COMMAND == "ADD" ]]; then
-
-# Add a veth pair
+func addVethPair{
   mkdir -p /var/run/netns/
   ln -sfT $CNI_NETNS /var/run/netns/$namespace
   ip link add veth1 type veth peer name veth2
@@ -28,8 +34,9 @@ if [[ $CNI_COMMAND == "ADD" ]]; then
   ip netns exec $namespace ip addr add $IP_ADDR dev $CNI_IFNAME
   # Add route if needed
   #ip netns exec $namespace ip route add default via .... dev $CNI_IFNAME
+}
 
-# Discover pf's and vf's
+func moveSriovInterfaces() {
   devs=($(ls /sys/class/net))
   pfs=()
   vfs=()
@@ -56,17 +63,24 @@ if [[ $CNI_COMMAND == "ADD" ]]; then
     fi
   done
 
-# Move vf's to container
+  # Move vf's to container
   for ifc in ${vfs[@]}; do
     ip link set $ifc netns $namespace
   done
 
-# Move pf's to container
+  # Move pf's to container
   for ifc in ${pfs[@]}; do
     ip link set $ifc netns $namespace
   done
+}
 
-OUTPUT="
+
+if [[ $CNI_COMMAND == "ADD" ]]; then
+
+  addVethPair
+  moveSriovInterfaces
+
+  OUTPUT="
   {
     \"cniVersion\": \"0.3.1\",
     \"interfaces\": [
